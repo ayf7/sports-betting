@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 import sys, os
+parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent_directory)
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(parent_directory)
+from misc.logger import Logger
+
+log = Logger("Processor")
+
 file_directory = os.path.dirname(__file__)
 data_directory = os.path.join(file_directory, '../data/')
 
@@ -28,10 +33,14 @@ yTr = np.array(aggregate_labels)
 games_ids = np.array(aggregate_game_ids)
 
 with open(os.path.join(data_directory, 'xTr.pkl'), 'wb') as file:
+    log.info(f"Dumped [xTr]. Shape: {xTr.shape}")
     pickle.dump(xTr, file)
   
 with open(os.path.join(data_directory, 'yTr.pkl'), 'wb') as file:
+    log.info(f"Dumped [yTr]. Shape: {yTr.shape}")
     pickle.dump(yTr, file)
 
 with open(os.path.join(data_directory, 'game_ids.pkl'), 'wb') as file:
+    log.info(f"Dumped [game_ids]. Shape: {games_ids.shape}")
     pickle.dump(games_ids, file)
+

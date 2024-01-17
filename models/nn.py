@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+import sys, os
+parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent_directory)
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,6 +10,8 @@ import numpy as np
 import pickle
 from sklearn.model_selection import train_test_split
 import matplotlib.pylab as plt
+from scrape.today_scraper import TodaysGameScraper
+from torch.nn.utils import clip_grad_norm_
 
 import sys, os
 parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -38,6 +44,9 @@ def train_model(model:nn.Module, criterion:nn.Module, optimizer:optim, xTr, yTr,
     Trains [model] with the specified parameters. if [save_dest] is specified,
     saves the weights.
     """
+    error_threshold = 5
+    error_count = 0
+    
     for epoch in range(num_epochs):
 
         outputs = model(xTr)
@@ -45,10 +54,18 @@ def train_model(model:nn.Module, criterion:nn.Module, optimizer:optim, xTr, yTr,
 
         optimizer.zero_grad()
         loss.backward()
+        clip_grad_norm_(model.parameters(), 1.0) # gradient clipping
         optimizer.step()
 
         if (epoch+1) % 100 == 0:
-            print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+            if loss.item() < error_threshold:
+                error_count += 1
+                if error_count == 10:
+                    print("Exiting.")
+                    break
+            else:
+                error_count = 0
+            print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f} [{error_count}]')
     
     # save if specified
     if save_dest:
@@ -67,7 +84,13 @@ def validate_model(model:nn.Module, xTe:torch.Tensor, yTe:torch.Tensor, threshol
     # Convert tensors to numpy arrays
     yTe = yTe.numpy()
     y_predict = y_predict.numpy()
-    result = np.concatenate((yTe, y_predict), axis=1).astype(int)
+    result = np.concatenate((yTe, y_predict), axis=1)
+
+    # Rounding function: deal with special case 0 < x < 1 -> want to round it to x = 1
+    rounded_array = np.round(result)
+    rounded_array[(0 < result) & (result < 1)] = 1
+    rounded_array[(-1 < result) & (result < 0)] = -1
+    result = rounded_array.astype(int)
 
     predict_correct = 0
     predict_total = 0
@@ -114,10 +137,11 @@ if __name__ == '__main__':
     # Split into training and testing sets
     # xTr, xTe, yTr, yTe = train_test_split(xTr, yTr, test_size=0.1) # random_state=7
 
-    days_past = 50
-    n = 100
-    xTr, yTr = xTr[:-days_past], yTr[:-days_past]
-    print(xTr.shape)
+    days_past = 0
+    n = 3
+    if days_past > 0:
+        xTr, yTr = xTr[:-days_past], yTr[:-days_past]
+    
     xTe, yTe = xTr[-n:], yTr[-n:]
     xTr, yTr = xTr[:-n], yTr[:-n]
 
@@ -127,9 +151,13 @@ if __name__ == '__main__':
     xTe = torch.from_numpy(xTe).float()
     yTe = torch.from_numpy(yTe).float()
 
+    todays_games = TodaysGameScraper(verbose=True)
+    xTe = todays_games.obtain('1/16/24')
+    xTe = torch.from_numpy(np.array(xTe)).float()
+    
     input_size = len(xTr[0])
 
-    hidden_sizes = [2, 2, 1, 1, 0.5, 0.5]
+    hidden_sizes = [2, 1, 0.5]
 
     for i, coef in enumerate(hidden_sizes):
         hidden_sizes[i] = int(coef * input_size)
@@ -137,8 +165,9 @@ if __name__ == '__main__':
 
     model = StandardNN(input_size, hidden_sizes, output_size)
     criterion = nn.MSELoss() 
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
-    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=1500, save_dest='model.pth')
+
+    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=5000, save_dest='model.pth')
 
     validate_model(model, xTe, yTe, 10, verbose=True)

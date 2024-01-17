@@ -80,14 +80,22 @@ class TodaysGameScraper:
 
                 row_data = pd.concat([home_team, home_players, road_team, road_players], axis=1)
                 data = row_data.iloc[0].tolist()
+                
                 if features:
                     assert(len(features[-1]) == len(data))
                 else:
                     print(self.log.info(f"Features found: {len(data)}"))
+                
                 features.append(data)
+            
+            return features
         
-        return features
-
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            return []
+        
+        
 if __name__ == '__main__':
     tgs = TodaysGameScraper(verbose=True)
     tgs.obtain()

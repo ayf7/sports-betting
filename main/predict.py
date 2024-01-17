@@ -27,7 +27,7 @@ with open(os.path.join(data_directory, 'yTr.pkl'), 'rb') as file:
 
 # Model Parameters
 input_size = len(xTr[0])
-hidden_sizes = [2, 2, 1, 1, 0.5, 0.5]
+hidden_sizes = [2, 1, 0.5]
 for i, coef in enumerate(hidden_sizes):
     hidden_sizes[i] = int(coef * input_size)
 output_size = len(yTr[0])
@@ -38,13 +38,13 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Model Training
-USE_PARAMS = True
-TRAIN = False
+USE_PARAMS = False
+TRAIN = True
 
 if USE_PARAMS:
     model = torch.load('model.pth')
 if TRAIN:
-    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=2000, save_dest='model.pth')
+    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=2400, save_dest='model2.pth')
 
 # Obtaining today's games
 todays_games = TodaysGameScraper(verbose=True)

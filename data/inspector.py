@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys, os
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,9 +10,9 @@ sys.path.append(parent_directory)
 file_directory = os.path.dirname(__file__)
 data_directory = os.path.join(file_directory, '../data/')
 
-combined_files = ["2022-2023_.pkl"]
+combined_files = ["yTr.pkl"]
 
 for c in combined_files:
     with open(os.path.join(data_directory, c), 'rb') as file:
-        features, labels, dates, game_ids = pickle.load(file)
-        print(np.array(labels).shape)
+        xTr = pickle.load(file)
+        print(xTr[-10:])
