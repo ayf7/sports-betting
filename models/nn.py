@@ -13,10 +13,6 @@ import matplotlib.pylab as plt
 from scrape.today_scraper import TodaysGameScraper
 from torch.nn.utils import clip_grad_norm_
 
-import sys, os
-parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(parent_directory)
-
 file_directory = os.path.dirname(__file__)
 data_directory = os.path.join(file_directory, '../data/')
 
@@ -136,28 +132,28 @@ if __name__ == '__main__':
 
     # Split into training and testing sets
     # xTr, xTe, yTr, yTe = train_test_split(xTr, yTr, test_size=0.1) # random_state=7
-
     days_past = 0
-    n = 3
+    n = 0
+    
     if days_past > 0:
         xTr, yTr = xTr[:-days_past], yTr[:-days_past]
-    
-    xTe, yTe = xTr[-n:], yTr[-n:]
-    xTr, yTr = xTr[:-n], yTr[:-n]
-
-    # Convert into PyTorch tensors
     xTr = torch.from_numpy(xTr).float()
     yTr = torch.from_numpy(yTr).float()
-    xTe = torch.from_numpy(xTe).float()
-    yTe = torch.from_numpy(yTe).float()
+
+    if n > 0:
+        xTe, yTe = xTr[-n:], yTr[-n:]
+        xTr, yTr = xTr[:-n], yTr[:-n]
+        xTe = torch.from_numpy(xTe).float()
+        yTe = torch.from_numpy(yTe).float()
+    # Convert into PyTorch tensors
 
     todays_games = TodaysGameScraper(verbose=True)
-    xTe = todays_games.obtain('1/16/24')
+    xTe, game_ids = todays_games.obtain()
     xTe = torch.from_numpy(np.array(xTe)).float()
     
     input_size = len(xTr[0])
 
-    hidden_sizes = [2, 1, 0.5]
+    hidden_sizes = [2, 2, 1, 1, 0.5]
 
     for i, coef in enumerate(hidden_sizes):
         hidden_sizes[i] = int(coef * input_size)
@@ -169,5 +165,11 @@ if __name__ == '__main__':
 
 
     train_model(model, criterion, optimizer, xTr, yTr, num_epochs=5000, save_dest='model.pth')
+    # model = torch.load('model.pth')
+    # validate_model(model, xTe, yTe, 10, verbose=True)
 
-    validate_model(model, xTe, yTe, 10, verbose=True)
+    with torch.no_grad():
+        y_predict = model(xTe)
+ 
+    for i in range(len(y_predict)):
+        print(game_ids[i], y_predict[i])

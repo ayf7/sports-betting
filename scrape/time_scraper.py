@@ -5,7 +5,7 @@ sys.path.append(parent_directory)
 
 from collections import defaultdict
 from typing import List
-from scrape.parameters.info import id_to_team, team_to_id
+from parameters.info import id_to_team, team_to_id
 import requests
 from misc.logger import Logger
 

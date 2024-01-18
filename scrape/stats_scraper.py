@@ -3,7 +3,7 @@ import sys, os
 parent_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(parent_directory)
 
-from scrape.parameters.info import team_to_id, id_to_team
+from parameters.info import team_to_id, id_to_team
 import requests
 import json
 import pandas as pd
@@ -44,7 +44,7 @@ class StatsScraper:
             'Referer': 'https://www.nba.com/'
         }
     
-        with open(os.path.join(file_directory, 'parameters/features.json'), 'r') as file:
+        with open(os.path.join(parent_directory, 'parameters/features.json'), 'r') as file:
             data = json.load(file)
             self.player_features = data['player_features']
             self.team_features = data['team_features']

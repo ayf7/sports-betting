@@ -6,7 +6,7 @@ sys.path.append(parent_directory)
 from collections import defaultdict
 from typing import List
 from scrape.stats_scraper import StatsScraper
-from scrape.parameters.info import id_to_team, team_to_id
+from parameters.info import id_to_team, team_to_id
 import requests
 from misc.logger import Logger
 from datetime import datetime
@@ -52,6 +52,7 @@ class TodaysGameScraper:
             list_of_games = json_data['games']
 
             features = []
+            game_ids = []
             for game in list_of_games:
 
                 # Retrieve information about the game info
@@ -73,8 +74,10 @@ class TodaysGameScraper:
                 home_players, home_team = self.stats_scraper.get_stats(team_info['homeTeam'], player_ids=team_info['homeTeamStarters'], date=d, location='Home')
                 road_players, road_team = self.stats_scraper.get_stats(team_info['roadTeam'], player_ids=team_info['roadTeamStarters'], date=d, location='Road')
 
+
                 home_players = home_players.drop(columns=['PLAYER_ID', 'PLAYER_NAME'])
                 road_players = road_players.drop(columns=['PLAYER_ID', 'PLAYER_NAME'])
+                
                 home_players = home_players.stack().to_frame().T
                 road_players = road_players.stack().to_frame().T
 
@@ -82,13 +85,16 @@ class TodaysGameScraper:
                 data = row_data.iloc[0].tolist()
                 
                 if features:
-                    assert(len(features[-1]) == len(data))
+                    if not (len(features[-1]) == len(data)):
+                        self.log.fail("Insufficient data. Maybe a player is out?")
+                        continue
                 else:
                     print(self.log.info(f"Features found: {len(data)}"))
                 
                 features.append(data)
+                game_ids.append(f"{game['awayTeam']['teamAbbreviation']} @ {game['homeTeam']['teamAbbreviation']}")
             
-            return features
+            return features, game_ids
         
         else:
             print(f"Error: {response.status_code}")

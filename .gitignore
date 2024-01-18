@@ -1,1 +1,4 @@
 .deprecated/
+*.csv
+*.pkl
+__pycache__
