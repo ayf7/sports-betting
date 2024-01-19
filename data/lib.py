@@ -28,9 +28,7 @@ def aggregate_files() -> None:
     """
     Aggregates all year csv's into one, in chronological order.
     """
-
     combined_files = ["2020-2021", "2021-2022", "2022-2023", "2023-2024"]
-
     aggregate_df = pd.DataFrame()
 
     for file in combined_files:
@@ -58,6 +56,20 @@ def aggregate_to_features() -> None:
 
     dataframe_to_csv(df_features, dest='features.csv')
     dataframe_to_csv(df_scores, dest='scores.csv')
+
+def daily_to_features() -> None:
+    """
+    Generates [xTr] and [yTr]. 
+    """
+    df = csv_to_dataframe("daily.csv")
+
+    # Remove categorical features
+    suffixes_to_remove = ['_ID', '_NAME']
+    cols_to_remove = ['DATE']
+    columns_to_remove = [col for col in df.columns if any(col.endswith(suffix) for suffix in suffixes_to_remove) or col in cols_to_remove]
+    df = df.drop(columns=columns_to_remove)
+
+    dataframe_to_csv(df, dest='daily_features.csv')
 
 def to_numpy(*args:str) -> np.ndarray:
     """

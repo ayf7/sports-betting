@@ -11,19 +11,17 @@ import pickle
 from scrape.today_scraper import TodaysGameScraper
 from sklearn.model_selection import train_test_split
 from models.nn import StandardNN, train_model
+from data.lib import to_numpy
 
 file_directory = os.path.dirname(__file__)
 data_directory = os.path.join(file_directory, '../data/')
 
 # Data Loading
-
-with open(os.path.join(data_directory, 'xTr.pkl'), 'rb') as file:
-    xTr = pickle.load(file)
-    xTr = torch.from_numpy(xTr).float()
-with open(os.path.join(data_directory, 'yTr.pkl'), 'rb') as file:
-    yTr = pickle.load(file)
-    yTr = (yTr[:,0] - yTr[:,1]).reshape(-1, 1)
-    yTr = torch.from_numpy(yTr).float()
+xTr, yTr, xTe = to_numpy('features.csv', 'scores.csv', 'daily_features.csv')
+yTr = (yTr[:,0] - yTr[:,1]).reshape((-1, 1))
+xTr = torch.from_numpy(xTr).float()
+yTr = torch.from_numpy(yTr).float()
+xTe = torch.from_numpy(xTe).float()
 
 # Model Parameters
 input_size = len(xTr[0])
@@ -39,17 +37,14 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Model Training
 USE_PARAMS = False
-TRAIN = True
 
 if USE_PARAMS:
     model = torch.load('model.pth')
-if TRAIN:
+else:
     train_model(model, criterion, optimizer, xTr, yTr, num_epochs=2400, save_dest='model2.pth')
 
 # Obtaining today's games
 todays_games = TodaysGameScraper(verbose=True)
-xTe = todays_games.obtain()
-xTe = torch.from_numpy(np.array(xTe)).float()
 
 # Predicting models
 with torch.no_grad():

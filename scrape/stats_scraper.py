@@ -61,7 +61,7 @@ class StatsScraper:
             season = f"{year - 1}-{str(year)[2:]}"
         return season
     
-    def get_stats(self, team_id:int, location:str='', date:str='', player_ids:List[int]=None) -> Tuple[pd.DataFrame]:
+    def get_stats(self, team_id:int, location:str='', date:str='', player_ids:List[int]=None, recent=True) -> Tuple[pd.DataFrame]:
         """
         Retrieves statistics for a specific team given location, date, and
         player specifications.
@@ -85,8 +85,9 @@ class StatsScraper:
         self.payload['TeamID'] = team_id
         self.payload['Location'] = location
         self.payload['DateTo'] = date
-        date_start = (datetime.strptime(date, "%m/%d/%y") - timedelta(weeks=3)).strftime("%m/%d/%y")
-        self.payload['DateFrom'] = date_start
+        if recent:
+            date_start = (datetime.strptime(date, "%m/%d/%y") - timedelta(weeks=3)).strftime("%m/%d/%y")
+            self.payload['DateFrom'] = date_start
         self.payload['Season'] = self._generate_season(date)
 
         # Obtain JSON data
