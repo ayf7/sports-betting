@@ -12,15 +12,28 @@ class Scraper(ABC):
     """
     A generic scraper class
     """
-    def __init__(self, log_name="Scraper", verbose=True, **kwargs):
+    def __init__(self, log_name="Scraper", verbose=True, required_fields=[], **kwargs):
         self.url = ""
         self.payload = {key: str(value) for key, value in kwargs.items()}
         self.headers= {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
             'Referer': 'https://www.nba.com/'
         }
+        self.required_fields = required_fields
         self.logger = Logger(log_name, enabled=verbose)
         
+    def validate(self, **kwargs) -> True:
+        """
+        Ensures that all required keywords exist in forward call.
+        """
+        missing_words = []
+        for f in self.required_fields:
+            if f not in kwargs:
+                missing_words.append(f)
+        if missing_words:
+            self.logger.fail(f"Missing required keywords: {missing_words}")
+            return False
+        return True
     
     def get_request(self, **kwargs) -> requests.Response:
         """
@@ -41,12 +54,16 @@ class Scraper(ABC):
         Gets the request.
         Common keyword options: DateFrom, DateTo, Location
         """
+        
+        if not self.validate(**kwargs):
+            raise Exception("Missing Required Keywords")
+            
         response = self.get_request(**kwargs)
         if response.status_code == 200:
             return self.extract(response.json())
 
         else:
-            raise Exception(f"Error: {response.status_code}")
+            raise Exception(f"HTTP Error - {response.status_code}")
 
 class PlayerScraper(Scraper):
     """
@@ -67,16 +84,19 @@ class PlayerScraper(Scraper):
             'Period': '0',
             'PlusMinus': 'N',
             'Rank': 'N',
-            'Season': '2022-23',
+            'Season': '2023-24',
             'SeasonSegment': '',
             'SeasonType': 'Regular Season',
             'TeamID': '0',
         }
     
     def extract(self, json, **kwargs):
-       headers = json['resultSets'][0]['headers']
-       rows = json['resultSets'][0]['rowSet']
-       return pd.DataFrame(rows, columns=headers)
+        headers = json['resultSets'][0]['headers']
+        rows = json['resultSets'][0]['rowSet']
+
+        df = pd.DataFrame(rows, columns=headers)
+        df.set_index('PLAYER_ID', inplace=True)
+        return df
 
 class TeamScraper(Scraper):
     """
@@ -106,9 +126,12 @@ class TeamScraper(Scraper):
         }
     
     def extract(self, json, **kwargs):
-       headers = json['resultSets'][0]['headers']
-       rows = json['resultSets'][0]['rowSet']
-       return pd.DataFrame(rows, columns=headers)
+        headers = json['resultSets'][0]['headers']
+        rows = json['resultSets'][0]['rowSet']
+
+        df = pd.DataFrame(rows, columns=headers)
+        df.set_index('TEAM_ID', inplace=True)
+        return df
 
 class GameScraper(Scraper):
     """
@@ -117,7 +140,7 @@ class GameScraper(Scraper):
     """
 
     def __init__(self, verbose=True):
-        super().__init__("Game", verbose)
+        super().__init__("Game", verbose, ["GameID"])
         self.url = "https://stats.nba.com/stats/boxscoretraditionalv3"
         self.payload = {
             'GameID': '0022300445',
@@ -144,13 +167,75 @@ class GameScraper(Scraper):
             lst += player_ids
             data.append(lst)
         
-        return pd.DataFrame(data, columns=columns)
+        df = pd.DataFrame(data, columns=columns)
+        return df
 
+class TimeScraper(Scraper):
+    def __init__(self, verbose=True):
+        super().__init__("Time", verbose, ["gamedate"])
+        self.url = "https://core-api.nba.com/cp/api/v1.3/feeds/gamecardfeed"
+        self.payload = {
+            "gamedate": "01/02/2024",
+            "platform": "web"
+        }
+        self.headers = {
+            'Ocp-Apim-Subscription-Key': '747fa6900c6c4e89a58b81b72f36eb96',
+            'Origin': 'https://www.nba.com/',
+            'Referer': 'https://www.nba.com/',
+            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+    
+    def extract(self, json, **kwargs) -> list:
+        """
+        Converts a date into the list of game ids on that day.
+        Required keyword: gamedate
+        """
+        game_ids = []
+        if not json['modules']:
+            self.logger.warn("No games found.")
+            return game_ids
+        
+        for game in json['modules'][0]['cards']:
+            game_ids.append(game['cardData']['gameId'])
 
+        
+        game_ids.sort(key=lambda x : int(x)) # sort game_ids in increasing order
+        self.logger.info(f"Retrieved {len(game_ids)} games played: {game_ids}")
+        return game_ids
 
-
+from datetime import datetime, timedelta
+import time
 
 if __name__ == '__main__':
-    ps = GameScraper()
-    df = ps.forward()
-    print(df)
+    time_scraper = TimeScraper()
+    game_scraper = GameScraper()
+    team_scraper = TeamScraper()
+    player_scraper = PlayerScraper()
+
+    date = '01/01/2024'
+
+    # Obtain yesterday's date
+    date_format = '%m/%d/%Y'
+    date_object = datetime.strptime(date, date_format)
+    yesterday_obj = date_object - timedelta(days=1)
+    start_obj = date_object - timedelta(days=14)
+    yesterday_date = yesterday_obj.strftime(date_format)
+    start_date = start_obj.strftime(date_format)
+
+    time.sleep(5)
+
+    games = time_scraper.forward(gamedate='01/01/2024')
+
+    team_away = team_scraper.forward(DateFrom=start_date, DateTo=yesterday_date, Location='Road')
+    player_away = player_scraper.forward(DateFrom=start_date, DateTo=yesterday_date, Location='Road')
+    team_home = team_scraper.forward(DateFrom=start_date, DateTo=yesterday_date, Location='Home')
+    player_home = player_scraper.forward(DateFrom=start_date, DateTo=yesterday_date, Location='Home')
+
+    player_away_full = player_scraper.forward(DateFrom='', DateTo=yesterday_date, Location='Road')
+    player_home_full = player_scraper.forward(DateFrom='', DateTo=yesterday_date, Location='Home')
+
+    for df in [team_away, player_away, team_home, player_home, player_away_full, player_home_full]:
+        print(df, "\n")
+
+    for game_id in games:
+        ids = game_scraper.forward(GameID=game_id)
