@@ -53,6 +53,11 @@ class GameScraper:
             # Home and road team and player stats
             team_info = {}
             team_info['roadTeam'] = json_data['awayTeam']['teamId']
+
+            if not json_data['awayTeam']['players']:
+                self.log.fail(f"Players not found. Requires manual inspection.")
+                return [], []
+
             team_info['roadTeamStarters'] = [(json_data['awayTeam']['players'][x]['personId'], json_data['awayTeam']['players'][x]['position']) for x in range(5)]
             team_info['roadTeamStarters'].sort(key= lambda x :("GFC".index(x[1]), x)) # Sorting by G -> F -> C (increasing position)
             team_info['roadTeamStarters'] = [x[0] for x in team_info['roadTeamStarters']]
@@ -74,7 +79,7 @@ class GameScraper:
 
         else:
             self.log.fail(f"Error: {response.status_code}")
-            return []
+            return [], []
     
 if __name__ == '__main__':
     game_scraper = GameScraper()

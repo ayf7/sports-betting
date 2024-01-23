@@ -24,8 +24,6 @@ class DataHandler():
     """
     Handles all webscraping functions, retrieving inputs and labels.
     """
-    pass
-
     def __init__(self, target:str, verbose:bool=True):
         self.time_scraper = TimeScraper(verbose=verbose)
         self.game_scraper = GameScraper(verbose=verbose)
@@ -74,17 +72,13 @@ class DataHandler():
             # Game Scraping: get home/road teams ID and starting player ID/position
             stats, score = self.game_scraper.unpack_teams(id)
 
+            if not stats or not score:
+                 return
+
             # Obtain stats:
             home_players, home_team = self.stats_scraper.get_stats(stats['homeTeam'], player_ids=stats['homeTeamStarters'], date=d, location='Home')
             road_players, road_team = self.stats_scraper.get_stats(stats['roadTeam'], player_ids=stats['roadTeamStarters'], date=d, location='Road')
-
-            # print(stats['homeTeam'])
-            # print(home_players)
-            # print()
-            # print(stats['roadTeam'])
-            # print(home_team)
-            # print("\n---\n")
-
+            
             home_players = home_players.stack().to_frame().T
             road_players = road_players.stack().to_frame().T
 
@@ -204,7 +198,8 @@ class DataHandler():
                 # for each game, extract each home/road team/player feature
                 for id in games:
                     self.append_games(d, id, features)
-                    assert(len(features[-1]) == len(feature_cols)) # RAHHH
+                    if features:
+                        assert(len(features[-1]) == len(feature_cols)) # RAHHH
                 self.log.info(f"All games {d} has been saved.")
                 pass
         

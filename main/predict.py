@@ -11,7 +11,7 @@ import pickle
 from scrape.today_scraper import TodaysGameScraper
 from sklearn.model_selection import train_test_split
 from models.nn import StandardNN, train_model
-from data.lib import to_numpy
+from data.lib import to_numpy, csv_to_dataframe
 
 file_directory = os.path.dirname(__file__)
 data_directory = os.path.join(file_directory, '../data/')
@@ -22,6 +22,8 @@ yTr = (yTr[:,0] - yTr[:,1]).reshape((-1, 1))
 xTr = torch.from_numpy(xTr).float()
 yTr = torch.from_numpy(yTr).float()
 xTe = torch.from_numpy(xTe).float()
+
+data = csv_to_dataframe("daily.csv")
 
 # Model Parameters
 input_size = len(xTr[0])
@@ -36,17 +38,36 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Model Training
+def round_num(num:float) -> int:
+    if 0 < num and num < 1:
+        return 1
+    elif 0 > num and num > -1:
+        return -1
+    return round(num)
+
+games = [[] for _ in range(len(xTe))]
+
 USE_PARAMS = False
+for _ in range(20):
+    if USE_PARAMS:
+        model = torch.load('model.pth')
+    else:
+        model = StandardNN(input_size, hidden_sizes, output_size)
+        criterion = nn.MSELoss() 
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        train_model(model, criterion, optimizer, xTr, yTr, num_epochs=3000, save_dest='model2.pth')
 
-if USE_PARAMS:
-    model = torch.load('model.pth')
-else:
-    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=2400, save_dest='model2.pth')
+    # Obtaining today's games
+    todays_games = TodaysGameScraper(verbose=True)
 
-# Obtaining today's games
-todays_games = TodaysGameScraper(verbose=True)
+    # Predicting models
+    with torch.no_grad():
+        y_predict = model(xTe)
 
-# Predicting models
-with torch.no_grad():
-    y_predict = model(xTe)
-print(y_predict.numpy())
+    y_predict = y_predict.numpy()
+
+    print()
+    for i in range(len(y_predict)):
+        games[i].append(round_num(y_predict[i][0]))
+        print(games[i])
+    print()

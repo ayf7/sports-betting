@@ -28,7 +28,7 @@ def features():
     aggregate_to_features()
 
 def default_function():
-    print("No valid function specified")
+    print("No valid function specified.")
 
 def daily():
     todays_games = TodaysGameScraper(verbose=True)
@@ -44,6 +44,14 @@ function_mapping = {
     'daily': daily
 }
 
+function_help = {
+    'generate': 'generate <YYYY-YYYY>',
+    'update': 'update <YYYY-YYYY>',
+    'aggregate': 'aggregate',
+    'features': 'features',
+    'daily': 'daily'
+}
+
 def main():
     while True:
         user_input = input("Enter command: ").split()
@@ -57,7 +65,10 @@ def main():
         if selected_function != 'default_function':
             parameter_names = list(selected_function.__code__.co_varnames)[:selected_function.__code__.co_argcount]
             param_keyword_mapping = dict(zip(parameter_names, keywords))
-            selected_function(**param_keyword_mapping)
+            try:
+                selected_function(**param_keyword_mapping)
+            except TypeError:
+                print(f"Insufficient parameters. Usage: {function_help[first_argument]}")
         else:
             selected_function()
 

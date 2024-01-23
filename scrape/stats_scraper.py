@@ -14,6 +14,7 @@ from typing import List, Tuple
 
 file_directory = os.path.dirname(__file__)
 
+
 class StatsScraper:
     """
     Given a specific date, return the list of all game IDs
@@ -122,10 +123,42 @@ class StatsScraper:
             return []
 
 
-if __name__=='__main__':
-    ps = StatsScraper()
+class PlayerScraper:
+    """
+    Obtains a database of all players.
+    """
+    def __init__(self, verbose=True):
+        
+        self.url = "https://stats.nba.com/stats/leaguedashplayerstats"
+        
+        self.payload = {
+            'LastNGames': '15',
+            'LeagueID': '00',
+            'MeasureType': 'Base',
+            'Month': '0',
+            'OpponentTeamID': '0',
+            'PORound': '0',
+            'PaceAdjust': 'N',
+            'PerMode': 'PerGame',
+            'Period': '0',
+            'PlusMinus': 'N',
+            'Rank': 'N',
+            'Season': '2022-23',
+            'SeasonSegment': '',
+            'SeasonType': 'Regular Season',
+            'TeamID': '0',
+        }
+        
+        self.headers= {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
+            'Referer': 'https://www.nba.com/'
+        }
 
-    player_df, team_df = ps.get_stats('Boston Celtics', date='1/4/22', location='Home')
-    print(player_df)
-    print()
-    print(team_df)
+    def json(self, id:str, season:str):
+        self.payload['PlayerID'] = id
+        self.payload['Season'] = season
+        pass
+
+
+if __name__=='__main__':
+    ps = PlayerScraper()
