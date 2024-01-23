@@ -11,3 +11,12 @@ There are three aspects to this project:
 * Modeling: developing models to fit the training data and predict ongoing games. Found in the `models` directory.
 * Predicting and Decision Making: once our model gives a prediction for the final box score (+/-), how does it compare to the odds provided by the bookmaker? Which team should we bet for, and how much? Should we even bet at all? Found in the `main` directory.
 
+## Running
+`main/cmd.py` contains the file that can be executed to run all scripts. Upon execution, you will be prompted a command. The following commands are supported:
+* `generate <YYYY-YYYY>` - generates data for a specific season from scratch. You can interrupt and save the file whenever you want - the process will prompt whether to save before exiting.
+* `update <YYYY-YYYY>` - resumes data generation for a season. Requires that a season's data has at least been partially generated.
+* `aggregate` - combines all generated data into one large CSV.
+* `features` - extracts all selected features from the aggregate CSV in `parameters/features.json`
+* `daily` - scrapes today's games and features.
+
+`main/predict.py` can be executed to run the model. The current model should be able to be executed out of the box.
