@@ -1,4 +1,4 @@
-# Project: Sports Betting
+# Project: Sports Betting (NBA)
 A large aspects of the sports world is betting: predicting on the outcome of games. Predictions can range from the most high level outcomes, such as who will be the winner of the NBA finals or the superbowl,
 to the most specific outcomes, such as how many rebounds a player will get. The goal of this project is to determine to what extent it is possible "beat the book": making a profit off of the odds set by the
 bookmakers. As a big NBA fan, I will be focused on NBA moneyline odds: betting on the winner or loser of games.
