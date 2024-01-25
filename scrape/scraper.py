@@ -7,8 +7,14 @@ from abc import ABC, abstractmethod
 import requests
 import pandas as pd
 from misc.logger import Logger
-
 import json
+from parameters.info import seasons, id_to_team
+from datetime import datetime, timedelta
+import time
+import traceback
+
+file_directory = os.path.dirname(__file__)
+data_directory = os.path.join(file_directory, '../data/')
 
 class Scraper(ABC):
     """
@@ -22,7 +28,7 @@ class Scraper(ABC):
             'Referer': 'https://www.nba.com/'
         }
         self.required_fields = required_fields
-        self.logger = Logger(log_name, enabled=verbose)
+        self.logger = Logger(log_name, enabled=verbose, indent=1)
         
     def validate(self, **kwargs) -> True:
         """
@@ -51,7 +57,7 @@ class Scraper(ABC):
         data frame.
         """
 
-    def forward(self, **kwargs):
+    def forward(self, t:int = 1, **kwargs):
         """
         Gets the request.
         Common keyword options: DateFrom, DateTo, Location
@@ -62,6 +68,7 @@ class Scraper(ABC):
             raise Exception("Missing Required Keywords")
             
         response = self.get_request(**kwargs)
+        time.sleep(t)
         if response.status_code == 200:
             return self.extract(response.json(), **kwargs)
 
@@ -73,7 +80,7 @@ class PlayerScraper(Scraper):
     Obtains the stats of all players.
     """
     def __init__(self, verbose=True):
-        super().__init__("PlayerScrape", verbose, required_fields=['Season'])
+        super().__init__("PlayScraper", verbose, required_fields=['Season'])
         self.url = "https://stats.nba.com/stats/leaguedashplayerstats"
         self.payload = {
             'LastNGames': '0',
@@ -106,9 +113,9 @@ class PlayerScraper(Scraper):
         d_to = kwargs["DateTo"]
         if "DateFrom" in kwargs and len(kwargs["DateFrom"]) > 0:
             d_from = kwargs["DateFrom"]
-            self.logger.info(f"Extracted player statistics from {d_from} to {d_to}.")
+            self.logger.info(f"Extracted player statistics from {d_from} to {d_to}. Players: {df.shape[0]}")
         else:
-            self.logger.info(f"Extracted player statistics from start to {d_to}.")
+            self.logger.info(f"Extracted player statistics from start to {d_to}. Players: {df.shape[0]}")
         return df
 
 class TeamScraper(Scraper):
@@ -117,7 +124,7 @@ class TeamScraper(Scraper):
     Common keyword options: DateFrom, DateTo, Location
     """
     def __init__(self, verbose=True):
-        super().__init__("TeamScrape", verbose=verbose, required_fields=['Season'])
+        super().__init__("TeamScraper", verbose=verbose, required_fields=['Season'])
         self.url = 'https://stats.nba.com/stats/leaguedashteamstats'
         self.payload = {
             'LastNGames': '0',
@@ -149,7 +156,7 @@ class TeamScraper(Scraper):
         
         df.set_index('TEAM_ID', inplace=True, drop=False)
         d_to, d_from = kwargs["DateTo"], kwargs["DateFrom"]
-        self.logger.info(f"Extracted team statistics from {d_from} to {d_to}.")
+        self.logger.info(f"Extracted team statistics from {d_from} to {d_to}. Teams: {df.shape[0]}", carriage=True)
         return df
 
 class GameScraper(Scraper):
@@ -159,7 +166,7 @@ class GameScraper(Scraper):
     """
 
     def __init__(self, verbose=True):
-        super().__init__("GameScrape", verbose=verbose, required_fields=["GameID"])
+        super().__init__("GameScraper", verbose=verbose, required_fields=["GameID"])
         self.url = "https://stats.nba.com/stats/boxscoretraditionalv3"
         self.payload = {
             'GameID': '0022300445',
@@ -189,6 +196,9 @@ class GameScraper(Scraper):
         return df
         
 class TimeScraper(Scraper):
+    """
+    Given a date, returns all game ids that happened that day.
+    """
     def __init__(self, verbose=True):
         super().__init__("TimeScraper", verbose=verbose, required_fields=["gamedate"])
         self.url = "https://core-api.nba.com/cp/api/v1.3/feeds/gamecardfeed"
@@ -215,15 +225,16 @@ class TimeScraper(Scraper):
         
         for game in json['modules'][0]['cards']:
             game_ids.append(game['cardData']['gameId'])
-
         
         game_ids.sort(key=lambda x : int(x)) # sort game_ids in increasing order
-        self.logger.info(f"Retrieved {len(game_ids)} games played: {game_ids}")
+        game_str = ", ".join(game_ids)
+        self.logger.info(f"Retrieved {len(game_ids)} games: {game_str}")
         return game_ids
 
 class SeasonScraper():
     """
-    Scrape all data from a season.
+    Scrape all data from a season. The season links to '2023-24.csv' in the data
+    folder.
     """
 
     def __init__(self, season='2023-24', verbose=True):
@@ -231,22 +242,31 @@ class SeasonScraper():
             features = json.load(file)
         self.player_features = features['player_features']
         self.team_features = features['team_features']
-
         self.season = season
+        self.destination = os.path.join(data_directory, f"{season}.csv")
 
         self.time_scraper = TimeScraper(verbose)
         self.game_scraper = GameScraper(verbose)
         self.team_scraper = TeamScraper(verbose)
         self.player_scraper = PlayerScraper(verbose)
+        self.logger = Logger("SeasonScraper")
 
         self.home_player_cols, self.away_player_cols = [], []
         self.home_team_cols, self.away_team_cols = [], []
 
-    def get_player_values(self, ids, df:pd.DataFrame, df_full:pd.DataFrame,
+        # Check if loaded values already exist
+        if os.path.exists(self.destination):
+            self.df = pd.read_csv(self.destination, dtype={'GAME_ID': str})
+            self.logger.info(f"Existing file found. Games: {self.df.shape[0]}, Last Date:")
+        else:
+            self.df = pd.DataFrame()
+
+    def get_player_values(self, ids, df:pd.DataFrame, df_full:pd.DataFrame, df_general:pd.DataFrame,
                           columns_list:list=[], location:str="") -> list:
         """
         Given the id of a player, find the features that match in [df]. If not
-        found, find in [df_full], which should always be guaranteed.
+        found, find in [df_full]. If not, find in [df_general], which should
+        always be guaranteed.
 
         If columns_list is initially empty, the list with the column values
         in-place to [columns_list]. This value is not returned.
@@ -263,19 +283,29 @@ class SeasonScraper():
                 cols = df.columns.tolist()
                 cols = list(map(lambda x : f"{location.upper()}_{player}_{x}", cols))
                 columns_list += cols
+            
             player_id = ids[player]
-            if player_id in df.index:
+
+            # Goes through each 'cache' and looks for the most recent stats.
+            if player_id in df.index: # past 3 weeks stats
                 lst += df.loc[player_id].tolist()
-            elif player_id in df_full.index:
+
+            elif player_id in df_full.index: # stats from start of season
+                self.logger.warn(f"{player_id} extracted from beginning of season database.")
                 lst += df_full.loc[player_id].tolist()
+
+            elif player_id in df_general.index: # start of season + location invariant
+                self.logger.warn(f"{player_id} extracted from beginning of season, locationless database.")
+                lst += df_general.loc[player_id].tolist()
+
             else:
-                print(player_id)
-                raise Exception("Player not found at all: requires inspection.")
-        
-        assert(len(columns_list) == len(lst))
+                # for i in df_full.index[10:50]:
+                #     print(i)
+                self.logger.fail(f"Player {player_id} not found at all. Skipping...")
+                return []
         return lst
     
-    def get_team_values(self, ids, df:pd.DataFrame,
+    def get_team_values(self, ids, df:pd.DataFrame, df_full:pd.DataFrame, df_general:pd.DataFrame,
                             columns_list:list=[], location:str="") -> list:
         """
         Given the ids of a team, extract the features and labels (score) of the
@@ -293,9 +323,23 @@ class SeasonScraper():
             columns_list += cols
             columns_list.append("SCORE") # Score - TODO: maybe must be different for daily games without score/testing?
 
-        lst += df.loc[ids["TEAM_ID"]].tolist()
+        team_id = ids["TEAM_ID"]
+        if team_id in df.index:
+            lst += df.loc[team_id].tolist()
+        
+        elif team_id in df_full.index:
+            self.logger.warn(f"Team {team_id} extracted from beginning of season database.")
+            lst += df_full.loc[team_id].tolist()
+            
+        elif team_id in df_general.index:
+            self.logger.warn(f"Team {team_id} extracted from beginning of season, locationless database.")
+            lst += df_general.loc[team_id].tolist()
+        
+        else:
+            self.logger.fail(f"Team not found at all (how did this happen?). Skipping...")
+            return []
+            
         lst.append(ids["SCORE"])
-
         assert(len(columns_list) == len(lst))
         return lst
     
@@ -317,61 +361,135 @@ class SeasonScraper():
 
         return date_list
 
-    def generate(self, start_date:str, end_date:str) -> None:
-
+    def generate(self, start_date:str, end_date:str, update:bool=False) -> None:
+        """
+        Generates a dataframe from scratch.
+        """
         # Extract every date in the list
         date_list = self._generate_dates(start_date, end_date)
-
         lst = [] # stores new values generated
 
-        for date in date_list:
+        # if we are updating, truncate list to the last saved game's date
+        if update:
+            if self.df.empty:
+                self.logger.info("Cannot retrieve last saved game. Starting from scratch.")
+            else:
+                last_date = self.df.iloc[-1]["DATE"]
+                last_game = self.df.iloc[-1]["GAME_ID"]
+                self.logger.info(f"Resuming on date {last_date}...\n")
+                idx = date_list.index(last_date)
+                date_list = date_list[idx:]
+        try:
+            for date in date_list:
+                self.logger.info(f"[DATE: {date}]\n")
 
-            # Obtain the start and end dates for webscraping
-            date_format = '%m/%d/%Y'
-            date_object = datetime.strptime(date, date_format)
-            yesterday_obj = date_object - timedelta(days=1) # end date is yesterday
-            start_obj = date_object - timedelta(days=21) # can be tuned, currently set to three weeks
-            end_date = yesterday_obj.strftime(date_format)
-            start_date = start_obj.strftime(date_format)
+                # Obtain the start and end dates for webscraping
+                date_format = '%m/%d/%Y'
+                date_object = datetime.strptime(date, date_format)
+                yesterday_obj = date_object - timedelta(days=1) # end date is yesterday
+                start_obj = date_object - timedelta(days=21) # can be tuned, currently set to three weeks
+                end_date = yesterday_obj.strftime(date_format)
+                start_date = start_obj.strftime(date_format)
 
-            # Obtain all 6 webscraping dataframes: player and team from [start] to [end_date]
-            team_away = self.team_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Road',
-                                                    features=self.team_features, Season=self.season)
-            time.sleep(1)
-            player_away = self.player_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Road',
-                                                    features=self.player_features, Season=self.season)
-            time.sleep(1)
-            team_home = self.team_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Home',
-                                                    features=self.team_features, Season=self.season)
-            time.sleep(1)
-            player_home = self.player_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Home',
-                                                    features=self.player_features, Season=self.season)
-            time.sleep(1)
-            player_away_full = self.player_scraper.forward(DateFrom='', DateTo=end_date, Location='Road',
-                                                    features=self.player_features, Season=self.season)
-            time.sleep(1)
-            player_home_full = self.player_scraper.forward(DateFrom='', DateTo=end_date, Location='Home',
-                                                    features=self.player_features, Season=self.season)
+                # obtain the games
+                games = self.time_scraper.forward(gamedate=date)
 
-            # obtain the games
-            games = self.time_scraper.forward(gamedate=date)
+                # if we are updating, we will resume
+                if update and not self.df.empty and date == last_date:
+                    idx = games.index(last_game)
+                    games = games[idx+1:]
+                    game_str = ", ".join(games)
+                    self.logger.info(f"Updated values: {game_str}")
+                print()
 
-            for game_id in games:
-                teams_ids = self.game_scraper.forward(GameID=game_id)
+                if not games: continue
+                self.logger.info("[RETRIEVING GAMES...]\n")
 
-                home_player_rows = SeasonScraper().get_player_values(teams_ids.iloc[0], player_home, player_home_full, columns_list=self.home_player_cols, location='home')
-                home_team_rows = SeasonScraper().get_team_values(teams_ids.iloc[0], team_home, columns_list=self.home_team_cols, location='home')
-                away_player_rows = SeasonScraper().get_player_values(teams_ids.iloc[1], player_away, player_away_full, columns_list=self.away_player_cols, location='away')
-                away_team_rows = SeasonScraper().get_team_values(teams_ids.iloc[1], team_away, columns_list=self.away_team_cols, location='away')
+                # Obtain all 6 webscraping dataframes: player and team from [start] to [end_date]
+                team_away = self.team_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Road', features=self.team_features, Season=self.season)
+                player_away = self.player_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Road', features=self.player_features, Season=self.season)
+                team_home = self.team_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Home', features=self.team_features, Season=self.season)
+                player_home = self.player_scraper.forward(DateFrom=start_date, DateTo=end_date, Location='Home', features=self.player_features, Season=self.season)
+                
+                # Obtain 3 player reserves: away/home counterparts since the beginning of the season, and locationless since the beginning
+                player_away_full = self.player_scraper.forward(DateFrom='', DateTo=end_date, Location='Road', features=self.player_features, Season=self.season)
+                player_home_full = self.player_scraper.forward(DateFrom='', DateTo=end_date, Location='Home', features=self.player_features, Season=self.season)
+                player_general = self.player_scraper.forward(DateFrom='', DateTo=end_date, Location='', features=self.player_features, Season=self.season)
 
-                lst.append(home_team_rows + home_player_rows + away_team_rows + away_player_rows)
-            columns = self.home_team_cols + self.home_player_cols + self.away_team_cols + self.away_player_cols
+                # Obtain 3 team reserves similarly above
+                team_away_full = self.team_scraper.forward(DateFrom='', DateTo=end_date, Location='Road', features=self.team_features, Season=self.season)
+                team_home_full = self.team_scraper.forward(DateFrom='', DateTo=end_date, Location='Home', features=self.team_features, Season=self.season)
+                team_general = self.team_scraper.forward(DateFrom='', DateTo=end_date, Location='', features=self.team_features, Season=self.season)
+                print()
+                
+                self.logger.info("[EXTRACTING GAMES...]\n")
+                for game_id in games:
+
+                    # checkpoint 1: some games were postponed/cancelled.
+                    try:
+                        teams_ids = self.game_scraper.forward(GameID=game_id, t=0.5)
+                    except TypeError:
+                        self.logger.fail(f"Failed to obtain game {game_id} attributes. Known reasons include postponement.")
+                        continue
+                        
+                    # checkpoint 2: some special games with teams outside the 30 are skipped.
+                    if teams_ids.loc[1]['TEAM_ID'] not in id_to_team or teams_ids.loc[1]['TEAM_ID'] not in id_to_team:
+                        self.logger.warn("Skipping game - invalid team found.")
+                        continue
+
+                    self.logger.info(f"Obtaining game {id_to_team[teams_ids.loc[1]['TEAM_ID']]} @ {id_to_team[teams_ids.loc[0]['TEAM_ID']]}")
+
+                    # Home team and players
+                    home_player_rows = self.get_player_values(teams_ids.iloc[0], player_home, player_home_full, player_general,
+                                                                         columns_list=self.home_player_cols, location='home')
+                    home_team_rows = self.get_team_values(teams_ids.iloc[0], team_home, team_home_full, team_general,
+                                                          columns_list=self.home_team_cols, location='home')
+
+                    # Away team and players
+                    away_player_rows = self.get_player_values(teams_ids.iloc[1], player_away, player_away_full, player_general,
+                                                                         columns_list=self.away_player_cols, location='away')
+                    away_team_rows = self.get_team_values(teams_ids.iloc[1], team_away, team_away_full, team_general,
+                                                          columns_list=self.away_team_cols, location='away')
+
+                    # Home and away scores
+                    scores = [teams_ids.iloc[0]["SCORE"], teams_ids.iloc[1]["SCORE"]]
+    
+                    if home_player_rows and home_team_rows and away_player_rows and away_team_rows:                   
+                        lst.append([date, game_id] + home_team_rows + home_player_rows + away_team_rows + away_player_rows + scores)
+
+                print()
+
+        except (Exception, KeyboardInterrupt) as e:
+            print("j", e)
+            traceback.print_exc()
+            print("\nInterrupt occurred")
+        
+        finally:
+            if self.df.empty:
+                columns = ["DATE", "GAME_ID"] + self.home_team_cols + self.home_player_cols + self.away_team_cols + self.away_player_cols + ["HOME_SCORE", "AWAY_SCORE"]
+            else:
+                columns = self.df.columns
+
             df = pd.DataFrame(lst, columns=columns)
-            print(df)
 
-from datetime import datetime, timedelta
-import time
+            self.df = pd.concat([self.df, df], axis=0)
+            self.df.to_csv(self.destination, index=False)
+        
 
 if __name__ == '__main__':
-    season_scraper = SeasonScraper('2023-24')
-    season_scraper.generate(start_date="12/01/2023", end_date="12/18/2023")
+
+    season = '2022-23'
+    season_scraper = SeasonScraper(season)
+    start_date = seasons[season]['startDate']
+
+    # set the start date to 2 weeks ahead of start
+    date_format = '%m/%d/%Y'
+    date_object = datetime.strptime(start_date, date_format)
+    date_object = date_object + timedelta(days=14)
+    start_date = datetime.strftime(date_object, date_format)
+
+    end_date = seasons[season]['endDate']
+    if season == '2023-24':
+        end_date = datetime.today() - timedelta(days=1)
+        end_date = datetime.strftime(end_date, date_format)
+    season_scraper.generate(start_date=start_date, end_date=end_date, update=True)

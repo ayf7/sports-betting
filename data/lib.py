@@ -73,7 +73,7 @@ def daily_to_features() -> None:
 
 def to_numpy(*args:str) -> np.ndarray:
     """
-    Wrapper that extracts
+    Wrapper that extracts all features in a dataframe as a numpy array.
     """
     outputs = []
     for file in args:

@@ -24,7 +24,7 @@ class Logger:
         return formatted_text
     
 
-    def prefix(self, text:str, color:colorama.Fore) -> None:
+    def prefix(self, text:str, color:colorama.Fore, carriage:bool=False) -> None:
         """
         Returns a prefix of the form [TEXT].
         """
@@ -34,31 +34,31 @@ class Logger:
         prefix = f"{left_bracket}{prefix}{right_bracket}"
         return prefix
     
-    def info(self, msg:str=""):
+    def info(self, msg:str="", carriage:bool=False):
         """
         Constructs the INFO prefix and returns it.
         """
         if self.enabled:
             prefix = self.prefix("INFO", color=colorama.Fore.GREEN)
-            self._print_msg(prefix, msg)
+            self._print_msg(prefix, msg, carriage=carriage)
     
-    def warn(self, msg:str=""):
+    def warn(self, msg:str="", carriage:bool=False):
         """
         Constructs the WARN prefix and returns it.
         """
         if self.enabled:
             prefix = self.prefix("WARN", color=colorama.Fore.YELLOW)
-            self._print_msg(prefix, msg)
+            self._print_msg(prefix, msg, carriage=carriage)
     
-    def fail(self, msg:str=""):
+    def fail(self, msg:str="", carriage:bool=False):
         """
         Constructs the FAIL prefix and returns it.
         """
         if self.enabled:
             prefix = self.prefix("FAIL", color=colorama.Fore.RED)
-            self._print_msg(prefix, msg)
+            self._print_msg(prefix, msg, carriage=carriage)
     
-    def _print_msg(self, prefix, msg):
+    def _print_msg(self, prefix, msg, carriage):
         """
         Prints the message after INFO/WARN/FAIL has been called. Should not be
         called directly.
@@ -77,7 +77,9 @@ class Logger:
         repeat = 2 if len(self.name) >= 8 else 3
         tabs = "\t"*repeat
         indent = "  "*self.indent
-        print(f"{indent}{time_stamp}{prefix} {name}{tabs}{msg}")
+
+        c = "\r" if carriage else ""
+        print(f"{c}{indent}{time_stamp}{prefix} {name}{tabs}{msg}")
         pass
 
 if __name__ == "__main__":
