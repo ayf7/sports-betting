@@ -28,7 +28,7 @@ def aggregate_files() -> None:
     """
     Aggregates all year csv's into one, in chronological order.
     """
-    combined_files = ["2020-2021", "2021-2022", "2022-2023", "2023-2024"]
+    combined_files = ["2020-21", "2021-22", "2022-23", "2023-24"]
     aggregate_df = pd.DataFrame()
 
     for file in combined_files:
@@ -38,11 +38,11 @@ def aggregate_files() -> None:
 
     dataframe_to_csv(aggregate_df, "aggregate.csv")
 
-def aggregate_to_features() -> None:
+def aggregate_to_features(source:str="aggregate.csv", dest_features:str="xTr.csv", dest_labels:str="yTr.csv") -> None:
     """
     Generates [xTr] and [yTr]. 
     """
-    df = csv_to_dataframe("aggregate.csv")
+    df = csv_to_dataframe(source)
 
     # Remove categorical features
     suffixes_to_remove = ['_ID', '_NAME']
@@ -51,17 +51,19 @@ def aggregate_to_features() -> None:
     df = df.drop(columns=columns_to_remove)
 
     # Split into input/output
-    df_features = df.drop(columns=['HOME_SCORE', 'ROAD_SCORE'])
-    df_scores = df[['HOME_SCORE', 'ROAD_SCORE']]
+    df_features = df.drop(columns=['HOME_SCORE', 'AWAY_SCORE'])
+    df_scores = df[['HOME_SCORE', 'AWAY_SCORE']]
 
-    dataframe_to_csv(df_features, dest='features.csv')
-    dataframe_to_csv(df_scores, dest='scores.csv')
+    dataframe_to_csv(df_features, dest=dest_features)
+    dataframe_to_csv(df_scores, dest=dest_labels)
 
-def daily_to_features() -> None:
+
+def daily_to_features(source:str='xTe_raw.csv', dest:str='xTe.csv') -> None:
     """
     Generates [xTr] and [yTr]. 
     """
-    df = csv_to_dataframe("daily.csv")
+    df = csv_to_dataframe(source)
+    df = df.drop(columns=['HOME_SCORE', 'AWAY_SCORE'])
 
     # Remove categorical features
     suffixes_to_remove = ['_ID', '_NAME']
@@ -69,7 +71,7 @@ def daily_to_features() -> None:
     columns_to_remove = [col for col in df.columns if any(col.endswith(suffix) for suffix in suffixes_to_remove) or col in cols_to_remove]
     df = df.drop(columns=columns_to_remove)
 
-    dataframe_to_csv(df, dest='daily_features.csv')
+    dataframe_to_csv(df, dest)
 
 def to_numpy(*args:str) -> np.ndarray:
     """

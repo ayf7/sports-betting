@@ -8,9 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import pickle
-from sklearn.model_selection import train_test_split
 import matplotlib.pylab as plt
-from scrape.today_scraper import TodaysGameScraper
 from torch.nn.utils import clip_grad_norm_
 
 file_directory = os.path.dirname(__file__)
@@ -117,59 +115,3 @@ def validate_model(model:nn.Module, xTe:torch.Tensor, yTe:torch.Tensor, threshol
 
     aggregate_correct = predict_correct + discard_correct
     print(f"Aggregate Accuracy: {aggregate_correct}/{aggregate_total} [{round(aggregate_correct/aggregate_total*100, 2)}]")
-
-
-if __name__ == '__main__':
-
-    with open(os.path.join(data_directory, 'xTr.pkl'), 'rb') as file:
-        xTr = pickle.load(file)
-
-    with open(os.path.join(data_directory, 'yTr.pkl'), 'rb') as file:
-        yTr = pickle.load(file)
-
-    yTr = yTr[:,0] - yTr[:,1]
-    yTr = yTr.reshape(-1, 1)
-
-    # Split into training and testing sets
-    # xTr, xTe, yTr, yTe = train_test_split(xTr, yTr, test_size=0.1) # random_state=7
-    days_past = 0
-    n = 0
-    
-    if days_past > 0:
-        xTr, yTr = xTr[:-days_past], yTr[:-days_past]
-    xTr = torch.from_numpy(xTr).float()
-    yTr = torch.from_numpy(yTr).float()
-
-    if n > 0:
-        xTe, yTe = xTr[-n:], yTr[-n:]
-        xTr, yTr = xTr[:-n], yTr[:-n]
-        xTe = torch.from_numpy(xTe).float()
-        yTe = torch.from_numpy(yTe).float()
-    # Convert into PyTorch tensors
-
-    todays_games = TodaysGameScraper(verbose=True)
-    xTe, game_ids = todays_games.obtain()
-    xTe = torch.from_numpy(np.array(xTe)).float()
-    
-    input_size = len(xTr[0])
-
-    hidden_sizes = [2, 2, 1, 1, 0.5]
-
-    for i, coef in enumerate(hidden_sizes):
-        hidden_sizes[i] = int(coef * input_size)
-    output_size = len(yTr[0])
-
-    model = StandardNN(input_size, hidden_sizes, output_size)
-    criterion = nn.MSELoss() 
-    optimizer = optim.Adam(model.parameters(), lr=0.0005)
-
-
-    train_model(model, criterion, optimizer, xTr, yTr, num_epochs=5000, save_dest='model.pth')
-    # model = torch.load('model.pth')
-    # validate_model(model, xTe, yTe, 10, verbose=True)
-
-    with torch.no_grad():
-        y_predict = model(xTe)
- 
-    for i in range(len(y_predict)):
-        print(game_ids[i], y_predict[i])

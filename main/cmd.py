@@ -2,24 +2,15 @@
 import sys, os, config
 
 from data.lib import aggregate_files, aggregate_to_features, daily_to_features
-from scrape.data_generator import DataHandler
-from scrape.today_scraper import TodaysGameScraper
+from scrape.generator import TodayGenerator, SeasonGenerator
 from parameters.info import seasons
 from datetime import datetime
 
 def generate(season:str):
-    file = season + '.csv'
-    data_handler = DataHandler(file)
-    data_handler.generate(start_date=seasons[season]['startDate'], end_date=seasons[season]['endDate'])
+    pass
 
 def update(season:str):
-    file = season + '.csv'
-    data_handler = DataHandler(file)
-    if season == '2023-2024': # update up to today's value
-        end_date = datetime.today().strftime("%m/%d/%y")
-    else:
-        end_date = seasons[season]['endDate']
-    data_handler.update(end_date=end_date)
+    pass
 
 def aggregate():
     aggregate_files()
@@ -31,9 +22,11 @@ def default_function():
     print("No valid function specified.")
 
 def daily():
-    todays_games = TodaysGameScraper(verbose=True)
-    todays_games.obtain()
+    todays_date = datetime.today().strftime("%m/%d/%Y")
+    today_generator = TodayGenerator()
+    today_generator.generate(todays_date)
     daily_to_features()
+    pass
 
 
 function_mapping = {
